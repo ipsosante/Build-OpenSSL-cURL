@@ -15,6 +15,10 @@
 # Jason Cox, @jasonacox
 #   https://github.com/jasonacox/Build-OpenSSL-cURL
 
+#####################################################################
+IPHONEOS_DEPLOYMENT_TARGET="11.0"
+#####################################################################
+
 set -e
 
 # set trap to help debug build errors
@@ -22,7 +26,7 @@ trap 'echo "** ERROR with Build - Check /tmp/openssl*.log"; tail /tmp/openssl*.l
 
 usage ()
 {
-	echo "usage: $0 [openssl version] [iOS SDK version (defaults to latest)]"
+	echo "usage: $0 [openssl version]"
 	trap - INT TERM EXIT
 	exit 127
 }
@@ -31,16 +35,8 @@ if [ "$1" == "-h" ]; then
 	usage
 fi
 
-if [ -z $2 ]; then
-	IOS_SDK_VERSION="" #"9.1"
-	IOS_MIN_SDK_VERSION="7.1"
-else
-	IOS_SDK_VERSION=$2
-	TVOS_SDK_VERSION=$3
-fi
-
 if [ -z $1 ]; then
-	OPENSSL_VERSION="openssl-1.0.1t"
+	OPENSSL_VERSION="openssl-1.0.2n"
 else
 	OPENSSL_VERSION="openssl-$1"
 fi
@@ -146,22 +142,15 @@ lipo \
 	-create -output Mac/lib/libssl.a
 
 echo "Building iOS libraries"
-buildIOS "armv7"
-buildIOS "armv7s"
 buildIOS "arm64"
 buildIOS "x86_64"
-buildIOS "i386"
 
 lipo \
-	"/tmp/${OPENSSL_VERSION}-iOS-armv7/lib/libcrypto.a" \
-	"/tmp/${OPENSSL_VERSION}-iOS-i386/lib/libcrypto.a" \
 	"/tmp/${OPENSSL_VERSION}-iOS-arm64/lib/libcrypto.a" \
 	"/tmp/${OPENSSL_VERSION}-iOS-x86_64/lib/libcrypto.a" \
 	-create -output iOS/lib/libcrypto.a
 
 lipo \
-	"/tmp/${OPENSSL_VERSION}-iOS-armv7/lib/libssl.a" \
-	"/tmp/${OPENSSL_VERSION}-iOS-i386/lib/libssl.a" \
 	"/tmp/${OPENSSL_VERSION}-iOS-arm64/lib/libssl.a" \
 	"/tmp/${OPENSSL_VERSION}-iOS-x86_64/lib/libssl.a" \
 	-create -output iOS/lib/libssl.a

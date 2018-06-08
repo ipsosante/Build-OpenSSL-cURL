@@ -13,6 +13,13 @@
 # Preston Jennings
 #   https://github.com/prestonj/Build-OpenSSL-cURL 
 
+
+
+####################################################
+IPHONEOS_DEPLOYMENT_TARGET="11.0"
+OPENSSL="${PWD}/../openssl"  
+####################################################
+
 set -e
 
 # set trap to help debug any build errors
@@ -20,7 +27,7 @@ trap 'echo "** ERROR with Build - Check /tmp/curl*.log"; tail /tmp/curl*.log' IN
 
 usage ()
 {
-	echo "usage: $0 [curl version] [iOS SDK version (defaults to latest)]"
+	echo "usage: $0 [curl version]" 
 	trap - INT TERM EXIT
 	exit 127
 }
@@ -29,22 +36,12 @@ if [ "$1" == "-h" ]; then
 	usage
 fi
 
-if [ -z $2 ]; then
-	IOS_SDK_VERSION="" #"9.1"
-	IOS_MIN_SDK_VERSION="7.1"
-else
-	IOS_SDK_VERSION=$2
-fi
-
 if [ -z $1 ]; then
-	CURL_VERSION="curl-7.50.1"
+	CURL_VERSION="curl-7.59.0"
 else
 	CURL_VERSION="curl-$1"
 fi
 
-OPENSSL="${PWD}/../openssl"  
-DEVELOPER=`xcode-select -print-path`
-IPHONEOS_DEPLOYMENT_TARGET="6.0"
 
 # HTTP2 support
 NOHTTP2="/tmp/no-http2"
@@ -64,15 +61,9 @@ fi
 buildMac()
 {
 	ARCH=$1
-	HOST="i386-apple-darwin"
+	HOST=$2
 
 	echo "Building ${CURL_VERSION} for ${ARCH}"
-
-	TARGET="darwin-i386-cc"
-
-	if [[ $ARCH == "x86_64" ]]; then
-		TARGET="darwin64-x86_64-cc"
-	fi
 
 	if [ ! -z "$NGHTTP2" ]; then 
 		NGHTTP2CFG="--with-nghttp2=${NGHTTP2}/Mac/${ARCH}"
@@ -97,47 +88,69 @@ buildMac()
 buildIOS()
 {
 	ARCH=$1
-	BITCODE=$2
+    HOST=$2
+    PLATFORM=$3
 
 	pushd . > /dev/null
 	cd "${CURL_VERSION}"
-  
-	if [[ "${ARCH}" == "i386" || "${ARCH}" == "x86_64" ]]; then
-		PLATFORM="iPhoneSimulator"
-	else
-		PLATFORM="iPhoneOS"
-	fi
-
-	if [[ "${BITCODE}" == "nobitcode" ]]; then
-		CC_BITCODE_FLAG=""	
-	else
-		CC_BITCODE_FLAG="-fembed-bitcode"	
-	fi
 
 	if [ ! -z "$NGHTTP2" ]; then 
 		NGHTTP2CFG="--with-nghttp2=${NGHTTP2}/iOS/${ARCH}"
 		NGHTTP2LIB="-L${NGHTTP2}/iOS/${ARCH}/lib"
 	fi
 	  
-	export $PLATFORM
-	export CROSS_TOP="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer"
-	export CROSS_SDK="${PLATFORM}${IOS_SDK_VERSION}.sdk"
-	export BUILD_TOOLS="${DEVELOPER}"
-	export CC="${BUILD_TOOLS}/usr/bin/gcc"
-	export CFLAGS="-arch ${ARCH} -pipe -Os -gdwarf-2 -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=${IOS_MIN_SDK_VERSION} ${CC_BITCODE_FLAG}"
-	export LDFLAGS="-arch ${ARCH} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -L${OPENSSL}/iOS/lib ${NGHTTP2LIB}"
+    SDKROOT="$(xcrun --sdk "$PLATFORM" --show-sdk-path)"
+    export CC="$(xcrun -f clang)"
+
+	export CFLAGS="-arch ${ARCH} -pipe -Os -gdwarf-2 -isysroot ${SDKROOT} -miphoneos-version-min=${IPHONEOS_DEPLOYMENT_TARGET}" 
+	export LDFLAGS="-arch ${ARCH} -isysroot ${SDKROOT} -L${OPENSSL}/iOS/lib ${NGHTTP2LIB}"
    
-	echo "Building ${CURL_VERSION} for ${PLATFORM} ${IOS_SDK_VERSION} ${ARCH} ${BITCODE}"
+	echo "Building ${CURL_VERSION} for ${PLATFORM} ${IPHONEOS_DEPLOYMENT_TARGET} ${ARCH}"
 
-	if [[ "${ARCH}" == "arm64" ]]; then
-		./configure -prefix="/tmp/${CURL_VERSION}-iOS-${ARCH}-${BITCODE}" -disable-shared --enable-static -with-random=/dev/urandom --with-ssl=${OPENSSL}/iOS ${NGHTTP2CFG} --host="arm-apple-darwin" &> "/tmp/${CURL_VERSION}-iOS-${ARCH}-${BITCODE}.log"
-	else
-		./configure -prefix="/tmp/${CURL_VERSION}-iOS-${ARCH}-${BITCODE}" -disable-shared --enable-static -with-random=/dev/urandom --with-ssl=${OPENSSL}/iOS ${NGHTTP2CFG} --host="${ARCH}-apple-darwin" &> "/tmp/${CURL_VERSION}-iOS-${ARCH}-${BITCODE}.log"
-	fi
+    ./configure \
+        -prefix="/tmp/${CURL_VERSION}-iOS-${ARCH}" \
+        --disable-shared \
+        --enable-static \
+        \
+        --disable-debug \
+        --enable-optimize \
+        --enable-warnings \
+        --disable-curldebug \
+        --enable-symbol-hiding \
+        \
+        --disable-ares \
+        \
+        --enable-http \
+        --disable-ftp \
+        --disable-file \
+        --disable-ldap \
+        --disable-ldaps \
+        --disable-rtsp \
+        --disable-proxy \
+        --disable-dict \
+        --disable-telnet \
+        --disable-tftp \
+        --disable-pop3 \
+        --disable-imap \
+        --disable-smb \
+        --disable-smtp \
+        --disable-gopher \
+        --disable-manual \
+        --disable-libcurl-option \
+        --enable-ipv6 \
+        \
+        --enable-threaded-resolver \
+        --disable-sspi \
+        --disable-crypto-auth \
+        --disable-tls-srp \
+        --with-ssl=${OPENSSL}/iOS \
+        ${NGHTTP2CFG} \
+        --host=${HOST} \
+        &> "/tmp/${CURL_VERSION}-iOS-${ARCH}.log"
 
-	make -j8 >> "/tmp/${CURL_VERSION}-iOS-${ARCH}-${BITCODE}.log" 2>&1
-	make install >> "/tmp/${CURL_VERSION}-iOS-${ARCH}-${BITCODE}.log" 2>&1
-	make clean >> "/tmp/${CURL_VERSION}-iOS-${ARCH}-${BITCODE}.log" 2>&1
+	make -j8 >> "/tmp/${CURL_VERSION}-iOS-${ARCH}.log" 2>&1
+	make install >> "/tmp/${CURL_VERSION}-iOS-${ARCH}.log" 2>&1
+	make clean >> "/tmp/${CURL_VERSION}-iOS-${ARCH}.log" 2>&1
 	popd > /dev/null
 }
 
@@ -163,7 +176,7 @@ echo "Unpacking curl"
 tar xfz "${CURL_VERSION}.tar.gz"
 
 echo "Building Mac libraries"
-buildMac "x86_64"
+buildMac x86_64 x86_64-apple-darwin
 
 echo "Copying headers"
 cp /tmp/${CURL_VERSION}-x86_64/include/curl/* include/curl/
@@ -172,35 +185,14 @@ lipo \
 	"/tmp/${CURL_VERSION}-x86_64/lib/libcurl.a" \
 	-create -output lib/libcurl_Mac.a
 
-echo "Building iOS libraries (bitcode)"
-buildIOS "armv7" "bitcode"
-buildIOS "armv7s" "bitcode"
-buildIOS "arm64" "bitcode"
-buildIOS "x86_64" "bitcode"
-buildIOS "i386" "bitcode"
+echo "Building iOS libraries"
+buildIOS arm64 x86_64-apple-darwin
+buildIOS x86_64 arm-apple-darwin iphoneos
 
 lipo \
-	"/tmp/${CURL_VERSION}-iOS-armv7-bitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-armv7s-bitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-i386-bitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-arm64-bitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-x86_64-bitcode/lib/libcurl.a" \
+	"/tmp/${CURL_VERSION}-iOS-arm64/lib/libcurl.a" \
+	"/tmp/${CURL_VERSION}-iOS-x86_64/lib/libcurl.a" \
 	-create -output lib/libcurl_iOS.a
-
-echo "Building iOS libraries (nobitcode)"
-buildIOS "armv7" "nobitcode"
-buildIOS "armv7s" "nobitcode"
-buildIOS "arm64" "nobitcode"
-buildIOS "x86_64" "nobitcode"
-buildIOS "i386" "nobitcode"
-
-lipo \
-	"/tmp/${CURL_VERSION}-iOS-armv7-nobitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-armv7s-nobitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-i386-nobitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-arm64-nobitcode/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-iOS-x86_64-nobitcode/lib/libcurl.a" \
-	-create -output lib/libcurl_iOS_nobitcode.a
 
 echo "Cleaning up"
 rm -rf /tmp/${CURL_VERSION}-*

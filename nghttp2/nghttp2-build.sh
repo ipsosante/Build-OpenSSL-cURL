@@ -20,20 +20,13 @@ trap 'echo "** ERROR with Build - Check /tmp/nghttp2*.log"; tail /tmp/nghttp2*.l
 
 usage ()
 {
-	echo "usage: $0 [nghttp2 version] [iOS SDK version (defaults to latest)]"
+	echo "usage: $0 [nghttp2 version]"
 	trap - INT TERM EXIT
 	exit 127
 }
 
 if [ "$1" == "-h" ]; then
 	usage
-fi
-
-if [ -z $2 ]; then
-	IOS_SDK_VERSION="" #"9.1"
-	IOS_MIN_SDK_VERSION="7.1"
-else
-	IOS_SDK_VERSION=$2
 fi
 
 if [ -z $1 ]; then
@@ -76,15 +69,9 @@ fi
 buildMac()
 {
 	ARCH=$1
-        HOST="i386-apple-darwin"
+    HOST=$2
 
 	echo "Building ${NGHTTP2_VERSION} for ${ARCH}"
-
-	TARGET="darwin-i386-cc"
-
-	if [[ $ARCH == "x86_64" ]]; then
-		TARGET="darwin64-x86_64-cc"
-	fi
 
 	export CC="${BUILD_TOOLS}/usr/bin/clang -fembed-bitcode"
         export CFLAGS="-arch ${ARCH} -pipe -Os -gdwarf-2 -fembed-bitcode"
@@ -102,7 +89,6 @@ buildMac()
 buildIOS()
 {
 	ARCH=$1
-	BITCODE=$2
 
 	pushd . > /dev/null
 	cd "${NGHTTP2_VERSION}"
@@ -113,12 +99,6 @@ buildIOS()
 		PLATFORM="iPhoneOS"
 	fi
 
-        if [[ "${BITCODE}" == "nobitcode" ]]; then
-                CC_BITCODE_FLAG=""
-        else
-                CC_BITCODE_FLAG="-fembed-bitcode"
-        fi
-  
 	export $PLATFORM
 	export CROSS_TOP="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer"
 	export CROSS_SDK="${PLATFORM}${IOS_SDK_VERSION}.sdk"
@@ -164,23 +144,17 @@ echo "Unpacking nghttp2"
 tar xfz "${NGHTTP2_VERSION}.tar.gz"
 
 echo "Building Mac libraries"
-buildMac "x86_64"
+buildMac "x86_64" "x86_64-apple-darwin"
 
 lipo \
         "${NGHTTP2}/Mac/x86_64/lib/libnghttp2.a" \
         -create -output "${NGHTTP2}/lib/libnghttp2_Mac.a"
 
 echo "Building iOS libraries (bitcode)"
-buildIOS "armv7" "bitcode"
-buildIOS "armv7s" "bitcode"
-buildIOS "arm64" "bitcode"
-buildIOS "x86_64" "bitcode"
-buildIOS "i386" "bitcode"
+buildIOS "arm64" 
+buildIOS "x86_64" 
 
 lipo \
-	"${NGHTTP2}/iOS/armv7/lib/libnghttp2.a" \
-	"${NGHTTP2}/iOS/armv7s/lib/libnghttp2.a" \
-	"${NGHTTP2}/iOS/i386/lib/libnghttp2.a" \
 	"${NGHTTP2}/iOS/arm64/lib/libnghttp2.a" \
 	"${NGHTTP2}/iOS/x86_64/lib/libnghttp2.a" \
 	-create -output "${NGHTTP2}/lib/libnghttp2_iOS.a"
