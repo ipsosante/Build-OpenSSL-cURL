@@ -10,9 +10,9 @@
 # EDIT this section to Select Versions #
 ########################################
 
-OPENSSL="1.0.2l"
-LIBCURL="7.54.1"
-NGHTTP2="1.24.0"
+OPENSSL="1.0.2n"
+LIBCURL="7.59.0"
+NGHTTP2="1.31.0"
 
 ########################################
 
@@ -71,10 +71,8 @@ echo "Creating archive in $ARCHIVE..."
 mkdir -p "$ARCHIVE"
 cp curl/lib/*.a $ARCHIVE
 cp openssl/iOS/lib/libcrypto.a $ARCHIVE/libcrypto_iOS.a
-cp openssl/tvOS/lib/libcrypto.a $ARCHIVE/libcrypto_tvOS.a
 cp openssl/Mac/lib/libcrypto.a $ARCHIVE/libcrypto_Mac.a
 cp openssl/iOS/lib/libssl.a $ARCHIVE/libssl_iOS.a
-cp openssl/tvOS/lib/libssl.a $ARCHIVE/libssl_tvOS.a
 cp openssl/Mac/lib/libssl.a $ARCHIVE/libssl_Mac.a
 cp nghttp2/lib/*.a $ARCHIVE
 echo "Archiving Mac binaries for curl and openssl..."

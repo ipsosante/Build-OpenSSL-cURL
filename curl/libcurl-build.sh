@@ -20,7 +20,7 @@ trap 'echo "** ERROR with Build - Check /tmp/curl*.log"; tail /tmp/curl*.log' IN
 
 usage ()
 {
-	echo "usage: $0 [curl version] [iOS SDK version (defaults to latest)] [tvOS SDK version (defaults to latest)]"
+	echo "usage: $0 [curl version] [iOS SDK version (defaults to latest)]"
 	trap - INT TERM EXIT
 	exit 127
 }
@@ -32,12 +32,8 @@ fi
 if [ -z $2 ]; then
 	IOS_SDK_VERSION="" #"9.1"
 	IOS_MIN_SDK_VERSION="7.1"
-	
-	TVOS_SDK_VERSION="" #"9.0"
-	TVOS_MIN_SDK_VERSION="9.0"
 else
 	IOS_SDK_VERSION=$2
-	TVOS_SDK_VERSION=$3
 fi
 
 if [ -z $1 ]; then
@@ -145,47 +141,6 @@ buildIOS()
 	popd > /dev/null
 }
 
-buildTVOS()
-{
-	ARCH=$1
-
-	pushd . > /dev/null
-	cd "${CURL_VERSION}"
-  
-	if [[ "${ARCH}" == "i386" || "${ARCH}" == "x86_64" ]]; then
-		PLATFORM="AppleTVSimulator"
-	else
-		PLATFORM="AppleTVOS"
-	fi
-	
-	if [ ! -z "$NGHTTP2" ]; then 
-		NGHTTP2CFG="--with-nghttp2=${NGHTTP2}/tvOS/${ARCH}"
-		NGHTTP2LIB="-L${NGHTTP2}/tvOS/${ARCH}/lib"
-	fi
-  
-	export $PLATFORM
-	export CROSS_TOP="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer"
-	export CROSS_SDK="${PLATFORM}${TVOS_SDK_VERSION}.sdk"
-	export BUILD_TOOLS="${DEVELOPER}"
-	export CC="${BUILD_TOOLS}/usr/bin/gcc"
-	export CFLAGS="-arch ${ARCH} -pipe -Os -gdwarf-2 -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -mtvos-version-min=${TVOS_MIN_SDK_VERSION} -fembed-bitcode"
-	export LDFLAGS="-arch ${ARCH} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -L${OPENSSL}/tvOS/lib ${NGHTTP2LIB}"
-#	export PKG_CONFIG_PATH 
-   
-	echo "Building ${CURL_VERSION} for ${PLATFORM} ${TVOS_SDK_VERSION} ${ARCH}"
-
-	./configure -prefix="/tmp/${CURL_VERSION}-tvOS-${ARCH}" --host="arm-apple-darwin" -disable-shared -with-random=/dev/urandom --disable-ntlm-wb --with-ssl="${OPENSSL}/tvOS" ${NGHTTP2CFG} &> "/tmp/${CURL_VERSION}-tvOS-${ARCH}.log"
-
-	# Patch to not use fork() since it's not available on tvOS
-        LANG=C sed -i -- 's/define HAVE_FORK 1/define HAVE_FORK 0/' "./lib/curl_config.h"
-        LANG=C sed -i -- 's/HAVE_FORK"]=" 1"/HAVE_FORK\"]=" 0"/' "config.status"
-
-	make -j8 >> "/tmp/${CURL_VERSION}-tvOS-${ARCH}.log" 2>&1
-	make install >> "/tmp/${CURL_VERSION}-tvOS-${ARCH}.log" 2>&1
-	make clean >> "/tmp/${CURL_VERSION}-tvOS-${ARCH}.log" 2>&1
-	popd > /dev/null
-}
-
 echo "Cleaning up"
 rm -rf include/curl/* lib/*
 
@@ -246,16 +201,6 @@ lipo \
 	"/tmp/${CURL_VERSION}-iOS-arm64-nobitcode/lib/libcurl.a" \
 	"/tmp/${CURL_VERSION}-iOS-x86_64-nobitcode/lib/libcurl.a" \
 	-create -output lib/libcurl_iOS_nobitcode.a
-
-echo "Building tvOS libraries (bitcode)"
-buildTVOS "arm64"
-buildTVOS "x86_64"
-
-lipo \
-	"/tmp/${CURL_VERSION}-tvOS-arm64/lib/libcurl.a" \
-	"/tmp/${CURL_VERSION}-tvOS-x86_64/lib/libcurl.a" \
-	-create -output lib/libcurl_tvOS.a
-
 
 echo "Cleaning up"
 rm -rf /tmp/${CURL_VERSION}-*
